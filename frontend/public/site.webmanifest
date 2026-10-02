@@ -1,0 +1,16 @@
+{
+  "name": "Covenant",
+  "short_name": "Covenant",
+  "description": "A verified-impact grants platform on GenLayer - each milestone releases funds only once a validator independently verifies it.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1C1712",
+  "theme_color": "#1C1712",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

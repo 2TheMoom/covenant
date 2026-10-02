@@ -1,0 +1,10 @@
+.vercel
+.env
+.env.local
+.env.*.local
+!.env.example
+.env*
+
+AGENTS.md
+CLAUDE.md
+*.tsbuildinfo

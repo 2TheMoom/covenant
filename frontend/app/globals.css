@@ -1,0 +1,295 @@
+@import "tailwindcss";
+
+/* Typography: --font-head / --font-body / --font-mono are set by
+   next/font/google in layout.tsx (Lora / Sora / Martian Mono) via the
+   "variable" option. */
+
+@custom-variant dark (&:is(.dark *));
+
+/* Covenant - a verified-impact grants theme. Each milestone is a
+   checkpoint a validator independently confirms, not a status a recipient
+   can just claim. Sage for the path traveled/verified, amber for the
+   fundraising/pending state, rust for a disputed or failed branch.
+   Deliberately distinct from Waypoint's field-green survey theme and
+   Tote's emerald/burgundy vesica. */
+:root {
+  --background: #1c1712;
+  --foreground: #f2ecdf;
+
+  --card: #241d15;
+  --card-foreground: #f2ecdf;
+  --popover: #241d15;
+  --popover-foreground: #f2ecdf;
+
+  --primary: #7a9471;
+  --primary-foreground: #1c1712;
+
+  --secondary: #2a2219;
+  --secondary-foreground: #f2ecdf;
+
+  --muted: #241d15;
+  --muted-foreground: #c2b9a3;
+
+  --accent: #7a9471;
+  --accent-foreground: #1c1712;
+
+  /* Extra semantic tones beyond the shadcn set, matching the locked mock */
+  --sage: #7a9471;
+  --sage-bright: #9bae8e;
+  --sage-dim: #5e7350;
+  --amber: #d4914a;
+  --amber-bright: #e8b479;
+  --amber-dim: #b06e2e;
+  --rust: #b5533a;
+  --rust-dim: #8a3f2c;
+  --slate: #8a8372;
+  --ink-faint: #6b6252;
+
+  --destructive: #b5533a;
+  --destructive-foreground: #f2ecdf;
+
+  --border: #2a2219;
+  --border-bright: #4a4330;
+  --input: #241d15;
+  --ring: #7a9471;
+
+  --radius: 0.875rem;
+}
+
+.dark {
+  --background: #1c1712;
+  --foreground: #f2ecdf;
+  --card: #241d15;
+  --card-foreground: #f2ecdf;
+  --popover: #241d15;
+  --popover-foreground: #f2ecdf;
+  --primary: #7a9471;
+  --primary-foreground: #1c1712;
+  --secondary: #2a2219;
+  --secondary-foreground: #f2ecdf;
+  --muted: #241d15;
+  --muted-foreground: #c2b9a3;
+  --accent: #7a9471;
+  --accent-foreground: #1c1712;
+  --destructive: #b5533a;
+  --destructive-foreground: #f2ecdf;
+  --border: #2a2219;
+  --input: #241d15;
+  --ring: #7a9471;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply text-foreground;
+    font-family: var(--font-body), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .font-head {
+    font-family: var(--font-head), serif;
+  }
+  .font-mono {
+    font-family: var(--font-mono), 'Courier New', monospace;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--sage-bright);
+  }
+
+  /* ---------- buttons ---------- */
+  .btn-field {
+    font-family: var(--font-body), sans-serif;
+    font-weight: 500;
+    font-size: 0.82rem;
+    padding: 11px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--sage);
+    background: transparent;
+    color: var(--sage-bright);
+    cursor: pointer;
+  }
+  .btn-field.solid { background: var(--sage); color: var(--primary-foreground); border-color: var(--sage); font-weight: 600; }
+  .btn-field.ghost { border-color: var(--border-bright); color: var(--muted-foreground); }
+  .btn-field.danger { border-color: var(--rust); color: var(--rust); }
+  .btn-field:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ---------- status pill ---------- */
+  .status-pill {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--amber);
+    color: var(--amber-bright);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .status-pill.active { border-color: var(--amber); color: var(--amber-bright); }
+  .status-pill.verified, .status-pill.completed, .status-pill.paid { border-color: var(--sage); color: var(--sage-bright); }
+  .status-pill.disputed, .status-pill.failed { border-color: var(--rust); color: var(--rust); }
+  .status-pill.cancelled { border-color: var(--slate); color: var(--slate); }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- milestone track ---------- */
+  .track-node { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; min-width: 76px; }
+  .track-line {
+    position: absolute;
+    top: 17px;
+    left: 50%;
+    width: 100%;
+    height: 0;
+    border-top: 2px dashed var(--border-bright);
+    z-index: 0;
+  }
+  .track-node.reached .track-line { border-top-color: var(--sage); }
+  .track-node:first-child .track-line { display: none; }
+  .track-disk {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--background);
+    border: 2px solid var(--border-bright);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1;
+    flex-shrink: 0;
+  }
+  .track-disk-inner { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border-bright); }
+  .track-node.reached .track-disk { border-color: var(--sage); background: var(--card); }
+  .track-node.reached .track-disk-inner { border-color: var(--sage); background: var(--sage); }
+  .track-node.current .track-disk { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(212,145,74,0.18); }
+  .track-node.current .track-disk-inner { border-color: var(--amber); background: var(--amber); }
+  .track-node.branch .track-disk { border-color: var(--rust); }
+  .track-node.branch .track-disk-inner { border-color: var(--rust); background: var(--rust); }
+  .track-label {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.64rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: 8px;
+    text-align: center;
+  }
+  .track-node.reached .track-label, .track-node.current .track-label { color: var(--muted-foreground); }
+  .track-node.current .track-label { color: var(--amber-bright); }
+
+  /* ---------- misc chrome ---------- */
+  .field-note {
+    font-family: var(--font-body), sans-serif;
+    font-size: 0.92rem;
+    color: var(--foreground);
+    line-height: 1.65;
+    background: var(--card);
+    border-left: 2px solid var(--sage);
+    padding: 16px 18px;
+    border-radius: 0 10px 10px 0;
+  }
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    font-family: var(--font-mono), monospace;
+    font-size: 0.78rem;
+    border-bottom: 1px dotted var(--border);
+    padding-bottom: 10px;
+  }
+  .kv-row .k { color: var(--ink-faint); letter-spacing: 0.04em; }
+  .kv-row .v { color: var(--foreground); text-align: right; word-break: break-word; }
+  .kv-row .v.sage { color: var(--sage-bright); }
+  .kv-row .v.amount { color: var(--sage-bright); font-weight: 600; }
+
+  .network-chip {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.72rem;
+    color: var(--muted-foreground);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .network-chip .led { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 6px var(--sage); }
+
+  .wallet-chip {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.75rem;
+    color: var(--sage-bright);
+    border: 1px solid var(--border-bright);
+    border-radius: 999px;
+    padding: 7px 14px 7px 12px;
+    background: var(--card);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wallet-chip:hover { border-color: var(--sage); }
+  .wallet-chip:disabled { opacity: 0.6; cursor: default; }
+  .wallet-chip .mark-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 5px var(--sage); }
+  .wallet-chip .mark-dot.off { background: var(--ink-faint); box-shadow: none; }
+
+  .progress-track {
+    height: 4px;
+    background: var(--border-bright);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill { height: 100%; background: var(--sage); }
+  .progress-fill.amber { background: var(--amber); }
+}
+
+html {
+  min-height: 100vh !important;
+  height: 100%;
+  scroll-behavior: smooth;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(122,148,113,0.08), transparent),
+    #1c1712 !important;
+  background-attachment: fixed !important;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh !important;
+  overscroll-behavior: none;
+}
