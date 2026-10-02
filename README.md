@@ -34,19 +34,44 @@ A campaign that never gets any verified milestone progress doesn't lock
 donations forever: `reclaim_donation(campaign_id)` lets a donor recover
 their own donation once 24 hours have passed with nothing verified.
 
-**Payouts go through `gl.get_contract_at(recipient).emit_transfer(value=
-amount)`, called with no method name - not `gl.evm.contract_interface`
-("Payee").** The two are not interchangeable: `gl.evm.contract_interface`
-compiles to an `EthSend` message, a bridge to a *separate external EVM
-chain* - confirmed by reading GenVM's own source
-(`genlayer/_internal/on_chain/eth.py`) - which is the right tool for
-paying out on a different chain and the wrong one here, since this
-contract only ever moves the same native GEN it already pooled via
-`gl.message.value`. `.emit_transfer()` on a `get_contract_at()` proxy
-with no method name compiles to `PostMessage` instead, GenVM's own
-same-consensus transfer, which the SDK documents as working for an
-address with no contract deployed at it precisely because it dispatches
-no method.
+**Payouts go through `gl.evm.contract_interface` ("Payee"), not
+`gl.get_contract_at(recipient).emit_transfer(...)`.** Paying a wallet is a
+chain-layer operation - GEN balances live on each Intelligent Contract's
+own ghost contract there - and `Payee` is the SDK's documented external-
+message path for it (confirmed against `genlayer-docs`'
+`value-transfers.mdx`/`messages.mdx`). `get_contract_at()` is an
+*internal*, GenVM-layer message instead; a plain wallet has no
+Intelligent Contract deployed at its address, so that message has
+nowhere valid to land, and per the SDK docs the value isn't automatically
+returned to the sender when it fails.
+
+**Live-verified end to end 2026-10-02, including a confirmed platform
+gap in payout delivery.** A real `genlayer-js` run (`PK`/`PK2` env vars,
+not the CLI, which can't attach `value` to a payable call) drove the
+full path - `create_campaign` → `add_milestone` → `donate` (0.002 GEN) →
+`verify_milestone` → an 11-minute wait for the challenge window →
+`claim_milestone_payout` - with 5/5 validator AGREE on every step. The
+contract's own bookkeeping is fully self-consistent afterward
+(`get_campaign` reports `status: "completed"`, `total_released:
+1000000000000000`; `get_milestone` reports `status: "paid"`,
+`paid_amount: 1000000000000000`, exactly matching `target_amount`) - but
+the recipient's actual on-chain GEN balance never moved, checked
+repeatedly over 10+ minutes past the claim transaction. This is the same
+acknowledged GenLayer platform gap documented in
+[genvm-manager#20](https://github.com/genlayerlabs/genvm-manager/issues/20)
+(closed 2026-09-17 as "will stay [broken] on the current deployments you
+use" pending a node/consensus fix) - `Payee` is the architecturally
+correct primitive per the SDK docs, but the underlying `emit_transfer`
+dispatch can still silently fail to deliver value regardless of which
+primitive is used, with the calling contract's own bookkeeping committing
+regardless since there's no delivery-confirmation callback. Unlike
+[Tote](https://github.com/2TheMoom/tote) and
+[Waypoint](https://github.com/2TheMoom/waypoint) (both hardened with a
+`pending_payouts` ledger and a permissionless retry method after a
+steward caught the same gap), Covenant does not yet have a reconciliation
+path - a milestone marked `paid` can't be re-claimed, so this specific
+run's 0.001 GEN is currently stuck in the contract's pooled balance. Worth
+the same fix as a proactive follow-up, not yet done.
 
 **Aggressive minification was necessary, not stylistic.** The contract
 combines three check types, a donor-challenge/LLM-adjudication
@@ -75,6 +100,9 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
   `create_campaign` call confirmed state actually persisted (`get_campaign`
   read back correctly), and `cov-live-1` ("Open Flood-Sensor Network") is
   live on the contract today.
+- **Full lifecycle live-verified 2026-10-02** (create → milestone → donate
+  → verify → claim, real GEN, 5/5 AGREE at every step) - see "About" above
+  for the complete result, including the confirmed payout-delivery gap.
 
 ## What's included
 - `contracts/covenant.py` — the Covenant Intelligent Contract
