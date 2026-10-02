@@ -64,6 +64,7 @@ class Covenant(gl.Contract):
     donations: TreeMap[str, u256]
     campaign_donors: TreeMap[str, DynArray[Address]]
     reclaimed: TreeMap[str, bool]
+    pending_payouts: TreeMap[str, u256]
 
     def __init__(self):
         pass
@@ -373,14 +374,20 @@ class Covenant(gl.Contract):
         self._bad(available <= 0, "No funds available yet")
 
         payout = m.target if m.target <= available else available
-        Payee(c.recipient).emit_transfer(value=payout)  # before status flip: a revert here reverts the whole call
-
         m.status = "paid"
         m.paid = payout
         c.released += payout
+        self.pending_payouts[milestone_id] = payout
+        Payee(c.recipient).emit_transfer(value=payout)
 
         if self._resolved(m.campaign_id):
             c.status = "completed"
+
+    @gl.public.write
+    def retry_milestone_payout(self, milestone_id: str) -> None:
+        amt = self.pending_payouts.get(milestone_id, u256(0))
+        self._bad(amt == 0, "No pending payout for this milestone")
+        Payee(self._gc(self._gm(milestone_id).campaign_id).recipient).emit_transfer(value=amt)
 
     def _has_progress(self, campaign_id: str) -> bool:
         return any(
@@ -403,10 +410,18 @@ class Covenant(gl.Contract):
         rkey = f"reclaimed_{key}"
         self._bad(self.reclaimed.get(rkey, False), "Already reclaimed")
 
-        Payee(donor).emit_transfer(value=amount)
         self.reclaimed[rkey] = True
         c.raised -= amount
         c.status = "cancelled"
+        self.pending_payouts[rkey] = amount
+        Payee(donor).emit_transfer(value=amount)
+
+    @gl.public.write
+    def retry_donation_reclaim(self, campaign_id: str, wallet: str) -> None:
+        key = f"reclaimed_{self._dkey(campaign_id, Address(wallet))}"
+        amt = self.pending_payouts.get(key, u256(0))
+        self._bad(amt == 0, "No pending payout for this wallet")
+        Payee(Address(wallet)).emit_transfer(value=amt)
 
     @gl.public.view
     def get_campaign(self, campaign_id: str) -> dict:

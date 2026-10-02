@@ -743,6 +743,31 @@ def test_claim_completes_campaign_once_all_milestones_terminal(direct_vm, direct
     assert contract.get_campaign("c-1")["status"] == "completed"
 
 
+def test_claim_records_pending_payout_for_retry(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """emit_transfer can fail to land independently of this call (a known,
+    acknowledged platform issue - see Payee's docstring in the README), so
+    claim_milestone_payout must leave the owed amount retriable rather
+    than only ever attempting delivery once."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob, target_amount=1000)
+
+    direct_vm.warp("2026-01-01T00:15:00Z")
+    direct_vm.sender = direct_alice
+    contract.claim_milestone_payout("m-1")
+
+    contract.retry_milestone_payout("m-1")  # must not revert - payout still on record
+
+
+def test_retry_milestone_payout_without_a_pending_payout_fails(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_pending(direct_vm, contract, direct_alice, direct_bob)
+
+    with direct_vm.expect_revert("No pending payout"):
+        contract.retry_milestone_payout("m-1")
+
+
 # ---------------------------------------------------------------------------
 # reclaim_donation
 # ---------------------------------------------------------------------------
@@ -856,6 +881,28 @@ def test_reclaim_completed_campaign_fails(direct_vm, direct_deploy, direct_alice
     direct_vm.sender = direct_bob
     with direct_vm.expect_revert("nothing to reclaim"):
         contract.reclaim_donation("c-1")
+
+
+def test_reclaim_records_pending_payout_for_retry(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _create_campaign(direct_vm, contract, direct_alice)
+    _donate(direct_vm, contract, direct_bob, value=500)
+
+    direct_vm.warp("2026-01-02T00:01:00Z")
+    direct_vm.sender = direct_bob
+    contract.reclaim_donation("c-1")
+
+    contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())  # must not revert
+
+
+def test_retry_donation_reclaim_without_a_pending_payout_fails(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _create_campaign(direct_vm, contract, direct_alice)
+
+    with direct_vm.expect_revert("No pending payout"):
+        contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())
 
 
 # ---------------------------------------------------------------------------

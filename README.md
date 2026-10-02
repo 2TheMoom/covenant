@@ -64,14 +64,19 @@ use" pending a node/consensus fix) - `Payee` is the architecturally
 correct primitive per the SDK docs, but the underlying `emit_transfer`
 dispatch can still silently fail to deliver value regardless of which
 primitive is used, with the calling contract's own bookkeeping committing
-regardless since there's no delivery-confirmation callback. Unlike
-[Tote](https://github.com/2TheMoom/tote) and
-[Waypoint](https://github.com/2TheMoom/waypoint) (both hardened with a
-`pending_payouts` ledger and a permissionless retry method after a
-steward caught the same gap), Covenant does not yet have a reconciliation
-path - a milestone marked `paid` can't be re-claimed, so this specific
-run's 0.001 GEN is currently stuck in the contract's pooled balance. Worth
-the same fix as a proactive follow-up, not yet done.
+regardless since there's no delivery-confirmation callback.
+
+**Fixed proactively the same day**, before any steward caught it here,
+matching the pattern [Tote](https://github.com/2TheMoom/tote) and
+[Waypoint](https://github.com/2TheMoom/waypoint) were forced to add:
+`claim_milestone_payout`/`reclaim_donation` now record the owed amount in
+`pending_payouts` before firing the transfer, and new permissionless
+`retry_milestone_payout(milestone_id)`/`retry_donation_reclaim(campaign_id,
+wallet)` re-attempt delivery of that exact recorded amount at no risk to
+anyone else's funds. The specific milestone from the run above still has
+its 0.001 GEN stuck (that contract instance predates the fix and has no
+retry path of its own), but any future payout on the current deployment
+can now be recovered if it silently fails to land.
 
 **Aggressive minification was necessary, not stylistic.** The contract
 combines three check types, a donor-challenge/LLM-adjudication
@@ -87,15 +92,16 @@ next deploy attempt.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0xb153413D77aE11d93bC6C085f0A95966abaCb202`](https://explorer-bradbury.genlayer.com/address/0xb153413D77aE11d93bC6C085f0A95966abaCb202)
+- **Contract:** [`0x2d4d6857a5474eb396108FAEba803f04677C5273`](https://explorer-bradbury.genlayer.com/address/0x2d4d6857a5474eb396108FAEba803f04677C5273)
 - **Frontend:** [covenant-frontend-eta.vercel.app](https://covenant-frontend-eta.vercel.app)
-- Verified via 57 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 61 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering campaign/milestone creation and their full validation surface,
   all three check types (including the decimal-string numeric-parsing
   edge case), donation accounting, the challenge window boundary, both
   dispute verdicts, payout accounting (including the underfunded-campaign
-  cap), `reclaim_donation`'s recovery paths, and the dispute prompt
-  genuinely wrapping untrusted input in isolating tags.
+  cap), `reclaim_donation`'s recovery paths, the two retry-payout methods,
+  and the dispute prompt genuinely wrapping untrusted input in isolating
+  tags.
 - Live-verified with a real write, not just a receipt check: a real
   `create_campaign` call confirmed state actually persisted (`get_campaign`
   read back correctly), and `cov-live-1` ("Open Flood-Sensor Network") is
