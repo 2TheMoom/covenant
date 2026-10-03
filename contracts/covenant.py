@@ -38,7 +38,7 @@ class Campaign:
     description: str
     raised: u256
     released: u256
-    status: str  # fundraising | active | completed | cancelled
+    status: str
     created_at: u256
 
 @allow_storage
@@ -47,9 +47,9 @@ class Milestone:
     campaign_id: str
     description: str
     target: u256
-    check_type: str  # github_merged | deployment_live | threshold
-    check_params: str  # JSON, shape depends on check_type
-    status: str  # pending | verified | disputed | failed | paid
+    check_type: str
+    check_params: str
+    status: str
     verified_at: u256
     reason: str
     challenger: str
@@ -65,6 +65,7 @@ class Covenant(gl.Contract):
     campaign_donors: TreeMap[str, DynArray[Address]]
     reclaimed: TreeMap[str, bool]
     pending_payouts: TreeMap[str, u256]
+    pending_floor: TreeMap[str, u256]
 
     def __init__(self):
         pass
@@ -270,7 +271,7 @@ class Covenant(gl.Contract):
                 return False
             scaled = self._to_scaled(leaf)
             return scaled is not None and OPS[p["comparison_op"]](scaled, int(p["threshold_scaled"]))
-        return False  # unreachable given add_milestone's validation
+        return False
 
     @gl.public.write
     def verify_milestone(self, milestone_id: str) -> None:
@@ -332,7 +333,7 @@ class Covenant(gl.Contract):
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             verdict = raw.get("verdict")
             if verdict not in ("uphold", "overturn"):
-                verdict = ""  # unparseable - never coerce a default
+                verdict = ""
             return {"verdict": verdict, "reasoning": str(raw.get("reasoning", ""))[:400]}
 
         def validator_fn(leaders_res) -> bool:
@@ -371,23 +372,33 @@ class Covenant(gl.Contract):
         self._bad(gl.message.sender_address != c.recipient, "Only the campaign recipient can claim a milestone payout")
 
         available = c.raised - c.released
-        self._bad(available <= 0, "No funds available yet")
+        self._bad(available <= 0, "No funds available")
 
         payout = m.target if m.target <= available else available
         m.status = "paid"
         m.paid = payout
         c.released += payout
-        self.pending_payouts[milestone_id] = payout
+        self._mark(milestone_id, c.recipient, payout)
         Payee(c.recipient).emit_transfer(value=payout)
 
         if self._resolved(m.campaign_id):
             c.status = "completed"
 
+    def _mark(self, key: str, r: Address, amt: u256) -> None:
+        self.pending_payouts[key] = amt
+        self.pending_floor[key] = Payee(r).balance
+
+    def _retry(self, key: str, r: Address) -> None:
+        amt = self.pending_payouts.get(key, u256(0))
+        self._bad(amt == 0, "No pending payout")
+        if Payee(r).balance >= self.pending_floor.get(key, u256(0)) + amt:
+            self.pending_payouts[key] = u256(0)
+            self._bad(True, "Payout already delivered")
+        Payee(r).emit_transfer(value=amt)
+
     @gl.public.write
     def retry_milestone_payout(self, milestone_id: str) -> None:
-        amt = self.pending_payouts.get(milestone_id, u256(0))
-        self._bad(amt == 0, "No pending payout for this milestone")
-        Payee(self._gc(self._gm(milestone_id).campaign_id).recipient).emit_transfer(value=amt)
+        self._retry(milestone_id, self._gc(self._gm(milestone_id).campaign_id).recipient)
 
     def _has_progress(self, campaign_id: str) -> bool:
         return any(
@@ -413,15 +424,13 @@ class Covenant(gl.Contract):
         self.reclaimed[rkey] = True
         c.raised -= amount
         c.status = "cancelled"
-        self.pending_payouts[rkey] = amount
+        self._mark(rkey, donor, amount)
         Payee(donor).emit_transfer(value=amount)
 
     @gl.public.write
     def retry_donation_reclaim(self, campaign_id: str, wallet: str) -> None:
-        key = f"reclaimed_{self._dkey(campaign_id, Address(wallet))}"
-        amt = self.pending_payouts.get(key, u256(0))
-        self._bad(amt == 0, "No pending payout for this wallet")
-        Payee(Address(wallet)).emit_transfer(value=amt)
+        w = Address(wallet)
+        self._retry(f"reclaimed_{self._dkey(campaign_id, w)}", w)
 
     @gl.public.view
     def get_campaign(self, campaign_id: str) -> dict:

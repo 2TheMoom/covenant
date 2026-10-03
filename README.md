@@ -69,14 +69,28 @@ regardless since there's no delivery-confirmation callback.
 **Fixed proactively the same day**, before any steward caught it here,
 matching the pattern [Tote](https://github.com/2TheMoom/tote) and
 [Waypoint](https://github.com/2TheMoom/waypoint) were forced to add:
-`claim_milestone_payout`/`reclaim_donation` now record the owed amount in
-`pending_payouts` before firing the transfer, and new permissionless
+`claim_milestone_payout`/`reclaim_donation` record the owed amount in
+`pending_payouts` before firing the transfer, with
 `retry_milestone_payout(milestone_id)`/`retry_donation_reclaim(campaign_id,
-wallet)` re-attempt delivery of that exact recorded amount at no risk to
-anyone else's funds. The specific milestone from the run above still has
-its 0.001 GEN stuck (that contract instance predates the fix and has no
-retry path of its own), but any future payout on the current deployment
-can now be recovered if it silently fails to land.
+wallet)` to re-attempt delivery.
+
+**That first version of the fix was itself wrong, caught a day later when
+a steward flagged the identical bug on Tote/Waypoint.** `pending_payouts`
+was never cleared after a successful delivery, so a recipient whose
+payout actually landed could call retry again anyway, firing a second
+real transfer and consuming GEN owed to other milestones/donors - an
+unbounded drain, not a rare edge case. Fixed with a `pending_floor`
+snapshot: the recipient's balance is recorded right before the first
+attempt, and retry now compares the recipient's *current* balance against
+`floor + amount` before re-sending - if it already landed, the record is
+cleared and retry refuses instead of re-firing.
+`test_retry_*_blocked_once_balance_confirms_delivery` proves this
+directly. 63 tests pass, lint clean. Redeployed:
+`0xed2e2535DeC81F6A782569FE524537849d465745`. The specific milestone from
+the run documented above is still permanently stuck (that contract
+instance predates any retry mechanism at all), but any future payout on
+the current deployment can now be recovered if it silently fails to land,
+without risking a double payment if it actually succeeded.
 
 **Aggressive minification was necessary, not stylistic.** The contract
 combines three check types, a donor-challenge/LLM-adjudication
@@ -92,9 +106,9 @@ next deploy attempt.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0x2d4d6857a5474eb396108FAEba803f04677C5273`](https://explorer-bradbury.genlayer.com/address/0x2d4d6857a5474eb396108FAEba803f04677C5273)
+- **Contract:** [`0xed2e2535DeC81F6A782569FE524537849d465745`](https://explorer-bradbury.genlayer.com/address/0xed2e2535DeC81F6A782569FE524537849d465745)
 - **Frontend:** [covenant-frontend-eta.vercel.app](https://covenant-frontend-eta.vercel.app)
-- Verified via 61 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 63 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering campaign/milestone creation and their full validation surface,
   all three check types (including the decimal-string numeric-parsing
   edge case), donation accounting, the challenge window boundary, both

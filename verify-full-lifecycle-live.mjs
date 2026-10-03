@@ -23,7 +23,7 @@
 import { createAccount, createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 
-const CONTRACT = "0x2d4d6857a5474eb396108FAEba803f04677C5273";
+const CONTRACT = "0xed2e2535DeC81F6A782569FE524537849d465745";
 const CAMPAIGN_ID = "e2e-test-" + Date.now(); // fresh campaign, so PK is genuinely its recipient
 const MILESTONE_ID = CAMPAIGN_ID + "-m-1";
 const TARGET_AMOUNT = 1000000000000000n; // 0.001 GEN payout target
