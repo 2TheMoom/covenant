@@ -768,15 +768,17 @@ def test_retry_milestone_payout_without_a_pending_payout_fails(direct_vm, direct
         contract.retry_milestone_payout("m-1")
 
 
-def test_retry_milestone_payout_blocked_once_balance_confirms_delivery(
+def test_retry_milestone_payout_clears_cleanly_once_balance_confirms_delivery(
     direct_vm, direct_deploy, direct_alice, direct_bob
 ):
-    """The real bug a steward caught on Tote/Waypoint: pending_payouts
-    alone never proved delivery, so a recipient whose payout actually
-    succeeded could call retry forever and drain funds owed to other
-    milestones/donors. Once the recipient's own balance shows the payout
-    already landed, retry must refuse to re-send it - and clear the
-    record so it can't even be asked again."""
+    """Two real bugs a steward caught on Tote/Waypoint, both apply here too:
+    (1) the old "already delivered" path cleared pending_payouts then
+    raised - raising reverts the whole call, so the clear never actually
+    persisted and the exact same balance check fired forever. Must return
+    normally instead so the clear sticks. (2) a balance-only check with no
+    cap stays exploitable if the recipient's balance later drops back
+    below the floor (they spend or transfer funds) - a later drop must
+    NOT reopen retry eligibility."""
     contract = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _to_verified(direct_vm, contract, direct_alice, direct_bob, target_amount=1000)
@@ -786,11 +788,32 @@ def test_retry_milestone_payout_blocked_once_balance_confirms_delivery(
     contract.claim_milestone_payout("m-1")
 
     direct_vm.deal(direct_alice, 10**18)  # simulate the payout having actually landed
-    with direct_vm.expect_revert("already delivered"):
-        contract.retry_milestone_payout("m-1")
+    contract.retry_milestone_payout("m-1")  # clears cleanly, no revert
 
     with direct_vm.expect_revert("No pending payout"):
         contract.retry_milestone_payout("m-1")  # cleared, not just blocked once
+
+    direct_vm.deal(direct_alice, -(10**18))  # recipient spends it back down
+    with direct_vm.expect_revert("No pending payout"):
+        contract.retry_milestone_payout("m-1")  # still cleared - balance drop doesn't reopen it
+
+
+def test_retry_milestone_payout_bounded_by_max_retries(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob, target_amount=1000)
+
+    direct_vm.warp("2026-01-01T00:15:00Z")
+    direct_vm.sender = direct_alice
+    contract.claim_milestone_payout("m-1")
+
+    for _ in range(3):  # MAX_RETRIES
+        contract.retry_milestone_payout("m-1")
+
+    with direct_vm.expect_revert("Retry limit"):
+        contract.retry_milestone_payout("m-1")
 
 
 # ---------------------------------------------------------------------------
@@ -930,7 +953,7 @@ def test_retry_donation_reclaim_without_a_pending_payout_fails(direct_vm, direct
         contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())
 
 
-def test_retry_donation_reclaim_blocked_once_balance_confirms_delivery(
+def test_retry_donation_reclaim_clears_cleanly_once_balance_confirms_delivery(
     direct_vm, direct_deploy, direct_alice, direct_bob
 ):
     contract = direct_deploy(CONTRACT)
@@ -943,11 +966,33 @@ def test_retry_donation_reclaim_blocked_once_balance_confirms_delivery(
     contract.reclaim_donation("c-1")
 
     direct_vm.deal(direct_bob, 10**18)  # simulate the refund having actually landed
-    with direct_vm.expect_revert("already delivered"):
-        contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())
+    contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())  # clears cleanly, no revert
 
     with direct_vm.expect_revert("No pending payout"):
         contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())  # cleared, not just blocked once
+
+    direct_vm.deal(direct_bob, -(10**18))  # recipient spends it back down
+    with direct_vm.expect_revert("No pending payout"):
+        contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())  # still cleared
+
+
+def test_retry_donation_reclaim_bounded_by_max_retries(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _create_campaign(direct_vm, contract, direct_alice)
+    _donate(direct_vm, contract, direct_bob, value=500)
+
+    direct_vm.warp("2026-01-02T00:01:00Z")
+    direct_vm.sender = direct_bob
+    contract.reclaim_donation("c-1")
+
+    for _ in range(3):  # MAX_RETRIES
+        contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())
+
+    with direct_vm.expect_revert("Retry limit"):
+        contract.retry_donation_reclaim("c-1", "0x" + direct_bob.hex())
 
 
 # ---------------------------------------------------------------------------

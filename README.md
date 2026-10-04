@@ -92,6 +92,21 @@ instance predates any retry mechanism at all), but any future payout on
 the current deployment can now be recovered if it silently fails to land,
 without risking a double payment if it actually succeeded.
 
+**Second fund-safety fix (2026-10-04).** The `pending_floor` retry above
+still had two real bugs, the same ones a steward caught on Tote and
+Waypoint's resubmissions: (1) the "already delivered" branch cleared
+`pending_payouts` and then raised - raising reverts the *entire* call, so
+that clear never actually persisted, leaving the exact same balance check
+exploitable forever; fixed by returning normally on that path instead of
+raising. (2) the balance check alone has no cap - if the recipient's
+balance later drops back below the floor (they spend or transfer funds),
+the same "not yet delivered" branch fires again, unboundedly; fixed with a
+`retry_count` map and a fixed `MAX_RETRIES = 3`, checked before any resend.
+`test_retry_*_clears_cleanly_once_balance_confirms_delivery` and
+`test_retry_*_bounded_by_max_retries` cover both fixes directly. 65 tests
+pass, lint clean, 18,773 bytes. Redeployed:
+`0xa34BB437365F428872F88ef4FEBDD843f084C675`.
+
 **Aggressive minification was necessary, not stylistic.** The contract
 combines three check types, a donor-challenge/LLM-adjudication
 subsystem, and seven view methods - Bradbury's hard, undocumented
@@ -106,7 +121,7 @@ next deploy attempt.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0xed2e2535DeC81F6A782569FE524537849d465745`](https://explorer-bradbury.genlayer.com/address/0xed2e2535DeC81F6A782569FE524537849d465745)
+- **Contract:** [`0xa34BB437365F428872F88ef4FEBDD843f084C675`](https://explorer-bradbury.genlayer.com/address/0xa34BB437365F428872F88ef4FEBDD843f084C675)
 - **Frontend:** [covenant-frontend-eta.vercel.app](https://covenant-frontend-eta.vercel.app)
 - Verified via 63 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering campaign/milestone creation and their full validation surface,
