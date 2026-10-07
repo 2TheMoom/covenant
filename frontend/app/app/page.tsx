@@ -20,6 +20,13 @@ import {
   useReclaimDonation,
   useDonation,
   useHasReclaimed,
+  useCampaignLeftover,
+  useHasReclaimedLeftover,
+  useResolveStaleDispute,
+  useRetryMilestonePayout,
+  useRetryDonationReclaim,
+  useReclaimLeftover,
+  useRetryLeftoverReclaim,
 } from "@/lib/hooks/useCovenant";
 import {
   Dialog,
@@ -35,6 +42,7 @@ import type { Campaign, Milestone, CheckType } from "@/lib/contracts/types";
 
 const CHALLENGE_WINDOW_SECONDS = 600;
 const RECOVERY_TIMEOUT_SECONDS = 86400;
+const STALE_DISPUTE_WINDOW_SECONDS = 86400;
 
 function shortAddr(hex: string): string {
   if (!hex) return "—";
@@ -415,11 +423,14 @@ function MilestoneRow({ id, campaignId, isRecipient }: { id: string; campaignId:
   const verify = useVerifyMilestone();
   const resolve = useResolveChallenge();
   const claim = useClaimMilestonePayout();
+  const resolveStale = useResolveStaleDispute();
+  const retryPayout = useRetryMilestonePayout();
 
   if (!m) return null;
 
   const challengeOpen = m.status === "verified" && now < Number(m.challenge_deadline);
   const canClaim = m.status === "verified" && !challengeOpen;
+  const disputeStale = m.status === "disputed" && now >= Number(m.challenge_deadline) + STALE_DISPUTE_WINDOW_SECONDS;
 
   return (
     <div className="rounded-xl p-4.5 flex flex-col gap-3" style={{ background: "var(--background)", border: "1px solid var(--border)", padding: 18 }}>
@@ -462,7 +473,23 @@ function MilestoneRow({ id, campaignId, isRecipient }: { id: string; campaignId:
             {resolve.isPending ? "Resolving…" : "Resolve dispute"}
           </button>
         )}
+        {disputeStale && (
+          <button className="btn-field ghost" disabled={resolveStale.isPending} onClick={() => resolveStale.run({ id, campaignId })}>
+            {resolveStale.isPending ? "Settling…" : "Settle stale dispute"}
+          </button>
+        )}
       </div>
+
+      {isRecipient && m.status === "paid" && (
+        <button
+          className="font-mono text-[0.7rem] underline self-start"
+          style={{ color: "var(--ink-faint)" }}
+          disabled={retryPayout.isPending}
+          onClick={() => retryPayout.run({ id, campaignId })}
+        >
+          {retryPayout.isPending ? "Retrying…" : "Didn't receive your payout? Retry delivery"}
+        </button>
+      )}
     </div>
   );
 }
@@ -477,7 +504,12 @@ function CampaignDetail({ id }: { id: string }) {
   const { address } = useWallet();
   const { data: myDonation } = useDonation(id, address ?? null);
   const { data: alreadyReclaimed } = useHasReclaimed(id, address ?? null);
+  const { data: leftover } = useCampaignLeftover(id);
+  const { data: alreadyReclaimedLeftover } = useHasReclaimedLeftover(id, address ?? null);
   const reclaim = useReclaimDonation();
+  const retryReclaim = useRetryDonationReclaim();
+  const reclaimLeftover = useReclaimLeftover();
+  const retryReclaimLeftover = useRetryLeftoverReclaim();
   const now = useNow(5000);
 
   if (isLoading) return <div className="p-8 text-center font-mono text-sm" style={{ color: "var(--ink-faint)" }}>Loading campaign…</div>;
@@ -493,6 +525,11 @@ function CampaignDetail({ id }: { id: string }) {
     !hasProgress &&
     Number(myDonation ?? "0") > 0 &&
     !alreadyReclaimed;
+  const canReclaimLeftover =
+    c.status === "completed" &&
+    Number(leftover ?? "0") > 0 &&
+    Number(myDonation ?? "0") > 0 &&
+    !alreadyReclaimedLeftover;
 
   return (
     <div className="rounded-2xl p-7 sm:p-8" style={{ background: "var(--card)", border: "1px solid var(--border-bright)" }}>
@@ -521,8 +558,27 @@ function CampaignDetail({ id }: { id: string }) {
                 {reclaim.isPending ? "Reclaiming…" : "Reclaim donation"}
               </button>
             )}
+            {canReclaimLeftover && (
+              <button className="btn-field danger" disabled={reclaimLeftover.isPending} onClick={() => reclaimLeftover.run({ campaignId: id })}>
+                {reclaimLeftover.isPending ? "Reclaiming…" : "Reclaim leftover share"}
+              </button>
+            )}
           </div>
           {!address && <span className="font-mono text-xs" style={{ color: "var(--ink-faint)" }}>Connect a wallet to act on this campaign.</span>}
+          {address && (alreadyReclaimed || alreadyReclaimedLeftover) && (
+            <div className="flex gap-4 font-mono text-[0.7rem]" style={{ color: "var(--ink-faint)" }}>
+              {alreadyReclaimed && (
+                <button className="underline" disabled={retryReclaim.isPending} onClick={() => retryReclaim.run({ campaignId: id })}>
+                  {retryReclaim.isPending ? "Retrying…" : "Didn't receive your refund? Retry delivery"}
+                </button>
+              )}
+              {alreadyReclaimedLeftover && (
+                <button className="underline" disabled={retryReclaimLeftover.isPending} onClick={() => retryReclaimLeftover.run({ campaignId: id })}>
+                  {retryReclaimLeftover.isPending ? "Retrying…" : "Didn't receive your leftover share? Retry delivery"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

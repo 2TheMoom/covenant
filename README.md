@@ -119,18 +119,41 @@ public view method's dict keys stayed untouched, every docstring and
 section-divider comment removed, got it to 17,825 bytes - cleared on the
 next deploy attempt.
 
+**Architecture fix (2026-10-07).** A steward review found the
+`pending_floor` balance-check retry above still unsound in both
+directions: a delayed balance update can cause a duplicate transfer, and
+an unrelated balance rise (campaign activity is pooled, fungible GEN) can
+wrongly mark a transfer "delivered" that never landed - GenVM exposes no
+other signal to confirm delivery. The whole balance-inspection mechanism
+was removed and replaced with a blind, `MAX_RETRIES`-bounded retry
+restricted to the actual beneficiary (`gl.message.sender_address !=
+recipient` reverts), with no balance check at all. The same review asked
+for two further recovery paths this uncovered as genuinely missing:
+`resolve_stale_dispute(milestone_id)` permissionlessly settles a
+milestone dispute nobody resolves back to its *pre-dispute* status after
+a 24-hour stale window (not a neutral reversion, which would let a
+disputing donor win by outlasting adjudication), and
+`reclaim_leftover(campaign_id)` fixes a real pre-existing bug where a
+campaign with a failed milestone could never release its unspent,
+already-pooled donations to anyone - donors can now reclaim their
+pro-rata share once the campaign is `completed`, with its own
+`retry_leftover_reclaim` for delivery retries. All five recovery actions
+are exposed in the frontend. 80 tests pass, lint clean, 20,075 bytes.
+Redeployed: `0xb99bbfE196f0039B808E9b510F7c0f8636f3cc53`.
+
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0xa34BB437365F428872F88ef4FEBDD843f084C675`](https://explorer-bradbury.genlayer.com/address/0xa34BB437365F428872F88ef4FEBDD843f084C675)
+- **Contract:** [`0xb99bbfE196f0039B808E9b510F7c0f8636f3cc53`](https://explorer-bradbury.genlayer.com/address/0xb99bbfE196f0039B808E9b510F7c0f8636f3cc53)
 - **Frontend:** [covenant-frontend-eta.vercel.app](https://covenant-frontend-eta.vercel.app)
-- Verified via 63 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 80 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering campaign/milestone creation and their full validation surface,
   all three check types (including the decimal-string numeric-parsing
   edge case), donation accounting, the challenge window boundary, both
-  dispute verdicts, payout accounting (including the underfunded-campaign
-  cap), `reclaim_donation`'s recovery paths, the two retry-payout methods,
-  and the dispute prompt genuinely wrapping untrusted input in isolating
-  tags.
+  dispute verdicts, the stale-dispute permissionless fallback, payout
+  accounting (including the underfunded-campaign cap), `reclaim_donation`
+  and `reclaim_leftover`'s recovery paths, every blind retry method, the
+  prompt showing the LLM the actual stored verification rule, and the
+  dispute prompt genuinely wrapping untrusted input in isolating tags.
 - Live-verified with a real write, not just a receipt check: a real
   `create_campaign` call confirmed state actually persisted (`get_campaign`
   read back correctly), and `cov-live-1` ("Open Flood-Sensor Network") is
@@ -144,7 +167,8 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
 - `tests/direct/test_covenant.py` — direct-mode tests (in-memory, mocked web/LLM)
 - A Next.js 16 frontend (TypeScript, TanStack Query, Radix UI) — a warm,
   two-hands-clasped mark, a marketing landing page with live stats, and
-  the functional app (create/donate/verify/challenge/claim/reclaim)
+  the functional app (create/donate/verify/challenge/claim/reclaim, plus
+  stale-dispute settlement, leftover reclaim, and retry-delivery actions)
 - Configuration file template and deployment scripts
 
 ## Requirements
@@ -233,10 +257,21 @@ The landing page is at http://localhost:3000/, the app at http://localhost:3000/
    campaign has actually raised minus what's already been released.
 8. **`reclaim_donation(campaign_id)`** — a donor recovers their own
    donation once 24 hours have passed with no verified milestone progress.
-9. **`get_campaign`** / **`get_milestone`** / **`get_all_campaign_ids`** /
-   **`get_campaign_milestone_ids`** / **`get_donation`** / **`get_donors`**
-   / **`has_reclaimed`** — read back a campaign's full state, its
-   milestones, its donors, and a wallet's position.
+9. **`resolve_stale_dispute(milestone_id)`** — permissionless backstop 24
+   hours past an unresolved dispute: settles back to the pre-dispute
+   (verified) status.
+10. **`reclaim_leftover(campaign_id)`** — once a campaign is `completed`
+    (every milestone paid or failed), a donor reclaims their pro-rata
+    share of whatever was never released.
+11. **`retry_milestone_payout`** / **`retry_donation_reclaim`** /
+    **`retry_leftover_reclaim`** — blind, `MAX_RETRIES`-bounded resends,
+    callable only by the actual beneficiary of that specific payout.
+12. **`get_campaign`** / **`get_milestone`** / **`get_all_campaign_ids`** /
+    **`get_campaign_milestone_ids`** / **`get_donation`** / **`get_donors`**
+    / **`has_reclaimed`** / **`get_campaign_leftover`** /
+    **`has_reclaimed_leftover`** / **`get_pending_payout`** — read back a
+    campaign's full state, its milestones, its donors, and a wallet's
+    position.
 
 ## Testing Strategy
 

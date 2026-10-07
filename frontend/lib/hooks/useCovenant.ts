@@ -149,6 +149,28 @@ export function useHasReclaimed(campaignId: string, wallet: string | null) {
   });
 }
 
+export function useCampaignLeftover(campaignId: string) {
+  const contract = useCovenantContract();
+
+  return useQuery<string, Error>({
+    queryKey: ["campaignLeftover", campaignId],
+    queryFn: () => (contract ? contract.getCampaignLeftover(campaignId) : Promise.resolve("0")),
+    staleTime: 2000,
+    enabled: !!contract && !!campaignId,
+  });
+}
+
+export function useHasReclaimedLeftover(campaignId: string, wallet: string | null) {
+  const contract = useCovenantContract();
+
+  return useQuery<boolean, Error>({
+    queryKey: ["hasReclaimedLeftover", campaignId, wallet],
+    queryFn: () => (contract && wallet ? contract.hasReclaimedLeftover(campaignId, wallet) : Promise.resolve(false)),
+    staleTime: 2000,
+    enabled: !!contract && !!campaignId && !!wallet,
+  });
+}
+
 function useWriteAction<TArgs>(
   action: (contract: Covenant, args: TArgs, feePreset: any, onSubmitted: (h: string) => void) => Promise<string>,
   successMessage: { title: string; description: string },
@@ -309,6 +331,70 @@ export function useReclaimDonation() {
       qc.invalidateQueries({ queryKey: ["donation", a.campaignId] });
       qc.invalidateQueries({ queryKey: ["hasReclaimed", a.campaignId] });
       qc.invalidateQueries({ queryKey: ["campaignList"] });
+    }
+  );
+}
+
+export function useResolveStaleDispute() {
+  return useWriteAction<{ id: string; campaignId: string }>(
+    (c, a, fee, cb) => c.resolveStaleDispute(a.id, fee, cb),
+    { title: "Dispute settled", description: "Settled at the pre-dispute outcome after the stale window." },
+    "Failed to settle dispute",
+    (qc, a) => {
+      qc.invalidateQueries({ queryKey: ["milestone", a.id] });
+      qc.invalidateQueries({ queryKey: ["campaignMilestones", a.campaignId] });
+    }
+  );
+}
+
+export function useRetryMilestonePayout() {
+  return useWriteAction<{ id: string; campaignId: string }>(
+    (c, a, fee, cb) => c.retryMilestonePayout(a.id, fee, cb),
+    { title: "Retry submitted", description: "Retried your own pending payout." },
+    "Retry failed",
+    (qc, a) => {
+      qc.invalidateQueries({ queryKey: ["milestone", a.id] });
+      qc.invalidateQueries({ queryKey: ["campaignMilestones", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["campaign", a.campaignId] });
+    }
+  );
+}
+
+export function useRetryDonationReclaim() {
+  return useWriteAction<{ campaignId: string }>(
+    (c, a, fee, cb) => c.retryDonationReclaim(a.campaignId, fee, cb),
+    { title: "Retry submitted", description: "Retried your own pending refund." },
+    "Retry failed",
+    (qc, a) => {
+      qc.invalidateQueries({ queryKey: ["campaign", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["donation", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["hasReclaimed", a.campaignId] });
+    }
+  );
+}
+
+export function useReclaimLeftover() {
+  return useWriteAction<{ campaignId: string }>(
+    (c, a, fee, cb) => c.reclaimLeftover(a.campaignId, fee, cb),
+    { title: "Leftover reclaimed", description: "Your share of the unreleased funds was sent to your wallet." },
+    "Failed to reclaim leftover",
+    (qc, a) => {
+      qc.invalidateQueries({ queryKey: ["campaign", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["donation", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["campaignLeftover", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["hasReclaimedLeftover", a.campaignId] });
+    }
+  );
+}
+
+export function useRetryLeftoverReclaim() {
+  return useWriteAction<{ campaignId: string }>(
+    (c, a, fee, cb) => c.retryLeftoverReclaim(a.campaignId, fee, cb),
+    { title: "Retry submitted", description: "Retried your own pending leftover share." },
+    "Retry failed",
+    (qc, a) => {
+      qc.invalidateQueries({ queryKey: ["campaign", a.campaignId] });
+      qc.invalidateQueries({ queryKey: ["donation", a.campaignId] });
     }
   );
 }

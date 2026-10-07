@@ -146,6 +146,30 @@ class Covenant {
     return Boolean(result);
   }
 
+  async getCampaignLeftover(campaignId: string): Promise<string> {
+    const result: any = await this.client.readContract({
+      address: this.contractAddress, functionName: "get_campaign_leftover", args: [campaignId],
+    });
+    return String(result ?? "0");
+  }
+
+  async hasReclaimedLeftover(campaignId: string, wallet: string): Promise<boolean> {
+    const result: any = await this.client.readContract({
+      address: this.contractAddress, functionName: "has_reclaimed_leftover", args: [campaignId, wallet],
+    });
+    return Boolean(result);
+  }
+
+  /** `key` is the raw internal retry key: a milestone id directly, or
+   * `reclaimed_<campaignId>_<wallet>` / `leftover_<campaignId>_<wallet>`
+   * (lowercased) for a donation reclaim or leftover reclaim. */
+  async getPendingPayout(key: string): Promise<string> {
+    const result: any = await this.client.readContract({
+      address: this.contractAddress, functionName: "get_pending_payout", args: [key],
+    });
+    return String(result ?? "0");
+  }
+
   private async submitWrite(
     functionName: string,
     args: unknown[],
@@ -246,6 +270,46 @@ class Covenant {
 
   async reclaimDonation(campaignId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
     return this.submitWrite("reclaim_donation", [campaignId], feePreset, onSubmitted);
+  }
+
+  async estimateResolveStaleDisputeFees(milestoneId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("resolve_stale_dispute", [milestoneId], level);
+  }
+
+  async resolveStaleDispute(milestoneId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("resolve_stale_dispute", [milestoneId], feePreset, onSubmitted);
+  }
+
+  async estimateRetryMilestonePayoutFees(milestoneId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("retry_milestone_payout", [milestoneId], level);
+  }
+
+  async retryMilestonePayout(milestoneId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("retry_milestone_payout", [milestoneId], feePreset, onSubmitted);
+  }
+
+  async estimateRetryDonationReclaimFees(campaignId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("retry_donation_reclaim", [campaignId], level);
+  }
+
+  async retryDonationReclaim(campaignId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("retry_donation_reclaim", [campaignId], feePreset, onSubmitted);
+  }
+
+  async estimateReclaimLeftoverFees(campaignId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("reclaim_leftover", [campaignId], level);
+  }
+
+  async reclaimLeftover(campaignId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("reclaim_leftover", [campaignId], feePreset, onSubmitted);
+  }
+
+  async estimateRetryLeftoverReclaimFees(campaignId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("retry_leftover_reclaim", [campaignId], level);
+  }
+
+  async retryLeftoverReclaim(campaignId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("retry_leftover_reclaim", [campaignId], feePreset, onSubmitted);
   }
 }
 
